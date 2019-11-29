@@ -25,51 +25,77 @@ int initSemophores(int q_size);
 
 
 
-struct Buffer {
-    int *queue_;
-    int capacity;
+//-1 means nothing, 0 means 
+//now i need something to keep track of the ids. hm
+class Buffer {
+    private: 
+         int *queue_;
+         int capacity, front, rear;
+    
+    public: 
+         int currentSize() {
+             return std::abs(std::abs(capacity - front+1) - std::abs(capacity - rear-1));
+         }
+         //returns the ID. ID is just index+1;
+         int pushJob(int duration) {
 
-    int currentSize() {
-        int count = 0;
-        for (int i = 0; i < capacity; i++) {
-            if (queue_[i]!= 0) {
-                count++;
+             if ((front == 0 && rear == capacity-1) || (rear +1 == front)) {
+                 std::cerr <<"Something has gone wrong! Trying to add to "
+                     << " the buffer when its full. ";
+                 return -1;
+             }
+
+             if (rear == capacity-1) {
+                 rear = 0;
+             } else {
+                 rear ++;
+                 queue_[rear] = duration;
+             }
+             if (front == -1) {
+                 front = 0;
+             }
+             //"id"
+             return rear +1;
+         }
+
+        int popJob(int &duration) {
+
+            if (front == -1) {
+                std::cerr << "Something went wrong! attempting to take "
+                    << "from empty buffer. ";
+                return -1;
             }
-        }
-        return count;
-    }
-    //returns the ID. ID is just index+1;
-    int pushJob(int jobDuration) {
-        for (int i = 0; i < capacity; i++) {
-            if (queue_[i] == 0) {
-                queue_[i] = jobDuration;
-                return i + 1;
+
+            int k = queue_[front];
+            if (front == rear) {
+                front = -1;
+                rear = -1;
+            } else {
+                if (front == capacity -1) {
+                    front = 0;
+                } else {
+                    front++;
+                }
             }
+            duration = k;
+            return front;
         }
-        return 0;
-    }
 
-    //puts value of job into @duration, returns the job ID
-    //
-    int popJob(int &duration) {
-        for (int i = 0; i < capacity; i++) {
-            if (queue_[i] != 0) {
-                duration = queue_[i];
-                queue_[i] = 0;
-                return i+1;
-            }
+        void finishJob(int jobID) {
+            
         }
-        return 0; 
-    }
 
-    Buffer(int size) : capacity(size) {
-        queue_ = new int[size]();
-    }
+        Buffer(int size) : capacity(size) {
+            queue_ = new int[size]();
+            front = rear = -1;
+        }
 
-    ~Buffer() {
-        delete[] queue_;
-    }
+        ~Buffer() {
+            delete[] queue_;
+        }
 };
+
+
 
 struct threadParameters {
     int sem_id_;
@@ -95,9 +121,6 @@ int main (int argc, char **argv)
         std::cerr <<"Incorrect number of parameters provided. Exiting.\n"; 
         return -1; 
     }
-    
-
-    std::cout <<"\n Key: " << SEM_KEY <<"\n"; 
 
     int q_size, job_no, prod_no, cons_no, sem_id; 
     parseArgs(q_size, job_no, prod_no, cons_no, argv); 
@@ -152,8 +175,6 @@ int main (int argc, char **argv)
 //producer thread function.
 void *producer (void *parameter) 
 {
-
-    std::cout << "in strt"; 
     auto parameters = (threadParameters*)parameter; 
 
     int sem_id, size, jobs, job_id, thread_id, duration; 
@@ -176,9 +197,9 @@ void *producer (void *parameter)
 
         size = buffer->currentSize(); 
 
-        std::cout << "Producer thread: " << thread_id << " has added job of id: "
-            << job_id << " and duration: " << duration << " to the buffer, resulting in a buffer size of: "
-            << size << "\n"; 
+        std::cout <<"Producer(" << thread_id << "): job id: "
+                  << job_id 
+                  << "duration: " << duration << '\n' ;
 
         sleep(5); 
     }
@@ -212,12 +233,15 @@ void *consumer (void *parameter)
         //signal that there is an extra space in the buffer 
         sem_signal(sem_id, SPACE); 
 
-        std::cout << "\nConsumer thread: " << thread_id << " has taken job of id: "
+        std::cout << "Consumer(" << thread_id << "): job id: "
                   << job_id 
-                  << " and duration: " << duration 
-                  << " and is preparing to sleep\n"; 
+                  << " executing sleep duration: " << duration 
+                  << '\n';
 
         sleep(duration); 
+
+        std::cout <<"Consumer(" << thread_id << "): Job id: " << job_id
+                    << " completed" << '\n' ;
     }
 
     // TODO 
