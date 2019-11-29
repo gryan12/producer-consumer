@@ -21,7 +21,7 @@
 # include <iostream>
 using namespace std;
 
-# define SEM_KEY 0x50 // Change this number as needed
+#define SEM_KEY 0x82 // Change this number as needed
 
 union semun {
     int val;               /* used for SETVAL only */
@@ -43,3 +43,4 @@ int sem_init (int, int, int);
 void sem_wait (int, short unsigned int);
 void sem_signal (int, short unsigned int);
 int sem_close (int);
+int sem_wait_till_time (int id, short unsigned int num, int time); 

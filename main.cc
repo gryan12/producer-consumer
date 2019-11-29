@@ -59,6 +59,7 @@ struct Buffer {
                 return i+1;
             }
         }
+        return 0; 
     }
 
     Buffer(int size) : capacity(size) {
@@ -70,14 +71,14 @@ struct Buffer {
     }
 };
 
-//rename this to params/args 
-struct producerParameters {
+struct threadParameters {
     int sem_id_;
     int job_no_;   
+    int thread_id_; 
     Buffer *buffer_;
     int producer_id; 
-    producerParameters(int sem_id, int job_no,Buffer* buffer): sem_id_(sem_id),job_no_(job_no), buffer_(buffer) {}
-    producerParameters(): sem_id_(0),job_no_(0), buffer_(NULL) {}
+    threadParameters(int sem_id, int job_no, int thread_id, Buffer* buffer): sem_id_(sem_id),job_no_(job_no), thread_id_(thread_id), buffer_(buffer) {}
+    threadParameters(): sem_id_(0),job_no_(0), buffer_(NULL) {}
 };
 
 int parseArgs(int &q, int &job_no, int&prod_no, int &cons_no, char** argv) {
@@ -111,29 +112,37 @@ int main (int argc, char **argv)
         return sem_id; 
     }
     
-    producerParameters parameters[prod_no]; 
+    threadParameters parameters[prod_no]; 
+    threadParameters cparameters[cons_no]; 
     //declaring array of required no. of posix threads
     pthread_t p_ids[prod_no];  
+    pthread_t c_ids[cons_no];  
 
 
-    std::cout <<"Testing"; 
-    std::cout <<"id, perprod, bsize: " << sem_id << ", " 
-                << job_no << ", " << q_size <<"\n"; 
-    //for every space in producers, 
-    //create a thread, pass the producer function as the start routine 
-    //pass null as args just for now 
-    /* pthread_create takes 4 args: a pthread, pthread attr pointer, 
-     * pointer to start routine function, pointer to arguments*/
+    //producers
     for (int i =0; i < prod_no; i++) {
         parameters[i].sem_id_ = sem_id; 
-        //same for every producer
+        parameters[i].thread_id_ = i+1; 
         parameters[i].job_no_ = job_no; 
         parameters[i].buffer_ = &buffer; 
         pthread_create(&p_ids[i], NULL, producer, (void*)&parameters[i]); 
     }
 
+    //consumers
+    for (int i =0; i < cons_no; i++) {
+        cparameters[i].sem_id_ = sem_id; 
+        cparameters[i].thread_id_ = i+1; 
+        cparameters[i].buffer_ = &buffer; 
+        pthread_create(&c_ids[i], NULL, consumer, (void*)&cparameters[i]); 
+    }
+
+    //wait producers to finish
     for (int i = 0; i < prod_no; i++) {
         pthread_join(p_ids[i], NULL); 
+    }
+    //wait consumers to finish 
+    for (int i = 0; i < cons_no; i++) {
+        pthread_join(c_ids[i], NULL); 
     }
 
     sem_close(sem_id); 
@@ -143,38 +152,78 @@ int main (int argc, char **argv)
 //producer thread function.
 void *producer (void *parameter) 
 {
-    std::cout << "in strt"; 
-    auto parameters = (producerParameters*)parameter; 
 
-    int sem_id, size, jobs, job_id, duration; 
+    std::cout << "in strt"; 
+    auto parameters = (threadParameters*)parameter; 
+
+    int sem_id, size, jobs, job_id, thread_id, duration; 
     sem_id = parameters->sem_id_; 
     jobs = parameters->job_no_; 
+    thread_id = parameters->thread_id_; 
+
     Buffer *buffer = parameters->buffer_; 
+    while (jobs--) {
 
-    std::cout << "\nThread is executing with params: " 
-                << sem_id << ", " << jobs
-                << ", with current buffer size being: " 
-                << buffer->currentSize() 
-                << "\n"; 
+        duration = rand() %10 + 1; 
 
+        sem_wait(sem_id, SPACE); 
 
-    duration = rand() %10 + 1; 
+        sem_wait(sem_id, MUTEX); 
+        job_id = buffer->pushJob(duration); 
+        sem_signal(sem_id, MUTEX); 
+        
+        sem_signal(sem_id, ITEMS); 
 
-    sem_wait(sem_id, MUTEX); 
-    job_id = buffer->pushJob(duration); 
-    sem_signal(sem_id, MUTEX); 
-    size = buffer->currentSize(); 
+        size = buffer->currentSize(); 
 
-    std::cout << "Producer thread has added job of id: "
-        << job_id << " and duration: " << duration << " to the buffer, resulting in a buffer size of: "
-        << size << "\n"; 
+        std::cout << "Producer thread: " << thread_id << " has added job of id: "
+            << job_id << " and duration: " << duration << " to the buffer, resulting in a buffer size of: "
+            << size << "\n"; 
+
+        sleep(5); 
+    }
 
     pthread_exit(0); 
 }
 
-void *consumer (void *id) 
+//args better
+void *consumer (void *parameter) 
 {
+    int duration, job_id;
+    auto parameters = (threadParameters*)parameter; 
+    int sem_id = parameters->sem_id_; 
+    int thread_id = parameters->thread_id_; 
+    Buffer *buffer = parameters->buffer_; 
+    
+    while (1) {
+
+        //if there are no items in the buffer, wait
+        //for max 20s
+        if (sem_wait_till_time(sem_id, ITEMS, 20)) {
+            break; 
+        }
+        
+        //wait to access the buffer
+        sem_wait(sem_id, MUTEX); 
+        //take job from the buffer
+        job_id = buffer->popJob(duration); 
+        //signal that finished accssing the buffer
+        sem_signal(sem_id, MUTEX); 
+        //signal that there is an extra space in the buffer 
+        sem_signal(sem_id, SPACE); 
+
+        std::cout << "\nConsumer thread: " << thread_id << " has taken job of id: "
+                  << job_id 
+                  << " and duration: " << duration 
+                  << " and is preparing to sleep\n"; 
+
+        sleep(duration); 
+    }
+
     // TODO 
+
+  std::cout << "Consumer thread: " << thread_id << " has no more jobs left to run. "
+            << "Exiting.\n"; 
 
   pthread_exit (0);
 
