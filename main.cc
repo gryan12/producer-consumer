@@ -22,46 +22,63 @@ int initSemophores(int q_size);
 //pass pointer to this into producer parameters 
 //ok so lets initialise queue_ to an array of queue_size containing
 //only 0; then rahter than checking if null, just c
+
+
+
 struct Buffer {
-    int *queue_; 
-    int capacity; 
+    int *queue_;
+    int capacity;
 
     int currentSize() {
-        int count = 0; 
+        int count = 0;
         for (int i = 0; i < capacity; i++) {
             if (queue_[i]!= 0) {
-                count++; 
+                count++;
             }
         }
-        return count; 
+        return count;
     }
-    //returns the ID. ID is just index+1; 
+    //returns the ID. ID is just index+1;
     int pushJob(int jobDuration) {
         for (int i = 0; i < capacity; i++) {
             if (queue_[i] == 0) {
-                queue_[i] = jobDuration; 
-                return i; 
+                queue_[i] = jobDuration;
+                return i + 1;
+            }
+        }
+        return 0;
+    }
+
+    //puts value of job into @duration, returns the job ID
+    //
+    int popJob(int &duration) {
+        for (int i = 0; i < capacity; i++) {
+            if (queue_[i] != 0) {
+                duration = queue_[i];
+                queue_[i] = 0;
+                return i+1;
             }
         }
         return 0; 
     }
 
     Buffer(int size) : capacity(size) {
-        queue_ = new int[capacity](); 
+        queue_ = new int[size]();
     }
 
     ~Buffer() {
-        delete[] queue_; 
+        delete[] queue_;
     }
-}; 
+};
 
-//rename this to params/args 
-struct producerParameters {
+struct threadParameters {
     int sem_id_;
-    int job_no_;
+    int job_no_;   
+    int thread_id_; 
     Buffer *buffer_;
     int producer_id; 
-    producerParameters(int sem_id, int q_size,int job_no,int* queue): sem_id_(sem_id), q_size_(q_size), job_no_(job_no), queue_(queue) {}
+    threadParameters(int sem_id, int job_no, int thread_id, Buffer* buffer): sem_id_(sem_id),job_no_(job_no), thread_id_(thread_id), buffer_(buffer) {}
+    threadParameters(): sem_id_(0),job_no_(0), buffer_(NULL) {}
 };
 
 int parseArgs(int &q, int &job_no, int&prod_no, int &cons_no, char** argv) {
@@ -71,90 +88,150 @@ int parseArgs(int &q, int &job_no, int&prod_no, int &cons_no, char** argv) {
     cons_no = check_arg(argv[4]);
 }
 
+
 int main (int argc, char **argv)
 {
     if (argc != 5) {
         std::cerr <<"Incorrect number of parameters provided. Exiting.\n"; 
         return -1; 
     }
+    
+
+    std::cout <<"\n Key: " << SEM_KEY <<"\n"; 
 
     int q_size, job_no, prod_no, cons_no, sem_id; 
     parseArgs(q_size, job_no, prod_no, cons_no, argv); 
 
-    //the shared resource
-    int* buffer = new int[q_size]; 
+    //shared resource; 
+    Buffer buffer(q_size); 
 
     //generate our set of 4 semophores
     sem_id = initSemophores(q_size); 
+    if (sem_id == -1) {
+        std::cerr << "Error initialising semohpores"; 
+        return sem_id; 
+    }
     
-    //declaring array of required no. of poxic threads
-    pthread_t producers[prod_no];  
+    threadParameters parameters[prod_no]; 
+    threadParameters cparameters[cons_no]; 
+    //declaring array of required no. of posix threads
+    pthread_t p_ids[prod_no];  
+    pthread_t c_ids[cons_no];  
 
-    producerParameters parameters(sem_id, q_size, job_no, buffer) ; 
-    //for every space in producers, 
-    //create a thread, pass the producer function as the start routine 
-    //pass null as args just for now 
-    /* pthread_create takes 4 args: a pthread, pthread attr pointer, 
-     * pointer to start routine function, pointer to arguments*/
+
+    //producers
     for (int i =0; i < prod_no; i++) {
-        pthread_create(&producers[i], NULL, producer, (void*)&parameters); 
+        parameters[i].sem_id_ = sem_id; 
+        parameters[i].thread_id_ = i+1; 
+        parameters[i].job_no_ = job_no; 
+        parameters[i].buffer_ = &buffer; 
+        pthread_create(&p_ids[i], NULL, producer, (void*)&parameters[i]); 
     }
 
+    //consumers
+    for (int i =0; i < cons_no; i++) {
+        cparameters[i].sem_id_ = sem_id; 
+        cparameters[i].thread_id_ = i+1; 
+        cparameters[i].buffer_ = &buffer; 
+        pthread_create(&c_ids[i], NULL, consumer, (void*)&cparameters[i]); 
+    }
 
+    //wait producers to finish
+    for (int i = 0; i < prod_no; i++) {
+        pthread_join(p_ids[i], NULL); 
+    }
+    //wait consumers to finish 
+    for (int i = 0; i < cons_no; i++) {
+        pthread_join(c_ids[i], NULL); 
+    }
 
-
+    sem_close(sem_id); 
     return 0;
 }
 
-//producer thread tasl funciton 
+//producer thread function.
 void *producer (void *parameter) 
 {
-    auto parameters = (producerParameters*)parameter; 
 
+    std::cout << "in strt"; 
+    auto parameters = (threadParameters*)parameter; 
 
-    //wait until released by id semophore
-    sem_wait(parameters->sem_id_, ID); 
-    sem_signal(parameters->sem_id_, ID); 
+    int sem_id, size, jobs, job_id, thread_id, duration; 
+    sem_id = parameters->sem_id_; 
+    jobs = parameters->job_no_; 
+    thread_id = parameters->thread_id_; 
 
-    std::cout <<"\nIn producer function. the job number is: " 
-              << parameters->job_no_ 
-              << "and the producer id is: " 
-              << id 
-              <<"\n"; 
+    Buffer *buffer = parameters->buffer_; 
+    while (jobs--) {
 
-    //generate 'random' job duration 
-    int duration; 
-    duration = rand()%10+1; 
+        duration = rand() %10 + 1; 
 
-    //wait to access the buffer
-    sem_wait(sem_id_, MUTEX); 
-    paramers->buffer_->push(duration); 
-    sem_signal(sem_id_, MUTEX); 
-    
-    sem_signal(sem_id_, EMPTY); 
-    
+        sem_wait(sem_id, SPACE); 
 
-    std::cout << "Producer of ID: " 
-              << id 
-              << " has added job of id: " 
-              << job 
-              << " with duration of: " 
-              << duration 
-              <<"\n"; 
-  pthread_exit(0);
+        sem_wait(sem_id, MUTEX); 
+        job_id = buffer->pushJob(duration); 
+        sem_signal(sem_id, MUTEX); 
+        
+        sem_signal(sem_id, ITEMS); 
+
+        size = buffer->currentSize(); 
+
+        std::cout << "Producer thread: " << thread_id << " has added job of id: "
+            << job_id << " and duration: " << duration << " to the buffer, resulting in a buffer size of: "
+            << size << "\n"; 
+
+        sleep(5); 
+    }
+
+    pthread_exit(0); 
 }
 
-void *consumer (void *id) 
+//args better
+void *consumer (void *parameter) 
 {
+    int duration, job_id;
+    auto parameters = (threadParameters*)parameter; 
+    int sem_id = parameters->sem_id_; 
+    int thread_id = parameters->thread_id_; 
+    Buffer *buffer = parameters->buffer_; 
+    
+    while (1) {
+
+        //if there are no items in the buffer, wait
+        //for max 20s
+        if (sem_wait_till_time(sem_id, ITEMS, 20)) {
+            break; 
+        }
+        
+        //wait to access the buffer
+        sem_wait(sem_id, MUTEX); 
+        //take job from the buffer
+        job_id = buffer->popJob(duration); 
+        //signal that finished accssing the buffer
+        sem_signal(sem_id, MUTEX); 
+        //signal that there is an extra space in the buffer 
+        sem_signal(sem_id, SPACE); 
+
+        std::cout << "\nConsumer thread: " << thread_id << " has taken job of id: "
+                  << job_id 
+                  << " and duration: " << duration 
+                  << " and is preparing to sleep\n"; 
+
+        sleep(duration); 
+    }
+
     // TODO 
+
+  std::cout << "Consumer thread: " << thread_id << " has no more jobs left to run. "
+            << "Exiting.\n"; 
 
   pthread_exit (0);
 
 }
 int initSemophores(int q_size) {
-
+    int sem; 
     //create semophoore set + gen id
-    int sem = sem_create(SEM_KEY, 4);
+    sem = sem_create(SEM_KEY, 4);
 
     /*initialise our 4 semophores*/
     //mutex: ensure mutual exclusivity for buffer access

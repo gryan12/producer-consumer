@@ -25,6 +25,16 @@ int check_arg (char *buffer)
   return num;
 }
 
+int sem_wait_till_time (int id, short unsigned int num, int time)
+{
+  struct sembuf op[] = {
+    {num, -1, SEM_UNDO}
+  };
+  struct timespec timeout = {time, 0}; 
+  int res = semtimedop (id, op, 1, &timeout);
+  return res;
+}
+
 int sem_create (key_t key, int num)
 {
   int id;
