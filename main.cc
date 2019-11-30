@@ -28,58 +28,68 @@ int initSemophores(int q_size);
 //-1 means nothing, 0 means 
 //now i need something to keep track of the ids. hm
 class Buffer {
+
     private: 
-         int *queue_;
-         int capacity;
-         int size_; 
-    
+        int *queue; 
+        int capacity, front, rear; 
+
     public: 
-         //returns the total number of elements in queue_
-         int currentSize() {
-             return size_; 
-         }
-
-         //push a job into the next available space on queue, returm the ID (index +1) of the job 
-         //
-         int pushJob(int duration) {
-             for (int i = 0; i < duration; i++) {
-                 if (queue_[i] == 0) {
-                     queue_[i] = duration; 
-                     size_++; 
-                     return i + 1; 
-                 }
-             }
-             return -4; 
-         }
-
-        //find a job in the queue that is not being accesed by another consumer, 
-        //and start processing it. 
-        int startJob(int &duration) {
-            for (int i = 0; i < capacity; i++) {
-                if (queue_[i] > 0) {
-                    duration = queue_[i]; 
-                    queue_[i] = -1; 
-                    return i+1; 
-                }
-            }
-            return -3; 
-        }
-
-        //delete job from queue array, freeing it up for future use
-        void finishJob(int jobID) {
-            jobID--; 
-            queue_[jobID] = 0; 
-            size_--; 
-        }
-
-        Buffer(int size) : capacity(size) {
-            queue_ = new int[size]();
-            size_ = 0; 
+        Buffer(int maxSize) : capacity(maxSize) {
+            queue = new int[maxSize]; 
+            front = rear = -1; 
         }
 
         ~Buffer() {
-            delete[] queue_;
+            delete[] queue; 
         }
+
+        //returns the ID of the job
+        int pushJob(int duration) {
+            //if full 
+            if ((front==0 && rear== capacity-1) || (rear+1 == front)) {
+                return -1; 
+            }
+
+            if (front == -1) {
+                front = 0; 
+            }
+
+            //circle, if rear at end move to start
+            if(rear == capacity-1) {
+                rear = 0; 
+            } else {
+                rear++; 
+            }
+            queue[rear] = duration; 
+            return rear+1; 
+        }
+
+        //returns the ID of the job, and puts duration
+        //in @duration
+        int popJob(int &duration) {
+            if (front == -1) {
+                std::cout << "is emptybruh"; 
+                return -1; 
+            }
+            int temp, rval; 
+            temp = queue[front]; 
+            if (front == rear) {
+                front = rear = -1; 
+            } else {
+                if (front == capacity-1) {
+                    front = 0; 
+                    rval = capacity; 
+                } else {
+                    front++; 
+                    rval = front; 
+                }
+
+            }
+            duration = temp; 
+            return rval; 
+        }
+
+
 };
 
 
@@ -136,6 +146,7 @@ int main (int argc, char **argv)
         parameters[i].job_no_ = job_no; 
         parameters[i].buffer_ = &buffer; 
         pthread_create(&p_ids[i], NULL, producer, (void*)&parameters[i]); 
+        sem_wait(sem_id, ID);
     }
 
     //consumers
@@ -144,6 +155,7 @@ int main (int argc, char **argv)
         cparameters[i].thread_id_ = i+1; 
         cparameters[i].buffer_ = &buffer; 
         pthread_create(&c_ids[i], NULL, consumer, (void*)&cparameters[i]); 
+        sem_wait(sem_id, ID);
     }
 
     //wait producers to finish
@@ -168,11 +180,12 @@ void *producer (void *parameter)
     sem_id = parameters->sem_id_; 
     jobs = parameters->job_no_; 
     thread_id = parameters->thread_id_; 
+    sem_signal(sem_id, ID);
 
     Buffer *buffer = parameters->buffer_; 
     while (jobs--) {
 
-        duration = rand() %10 + 1; 
+        duration = (rand() %10 + 1); 
         sem_wait(sem_id, SPACE); 
 
         sem_wait(sem_id, MUTEX); 
@@ -181,7 +194,6 @@ void *producer (void *parameter)
         
         sem_signal(sem_id, ITEMS); 
 
-        size = buffer->currentSize(); 
 
         sem_wait(sem_id, OUTPUT); 
         std::cout <<"\tProducer(" << thread_id << "): job id: "
@@ -189,8 +201,7 @@ void *producer (void *parameter)
                   << " duration: " << duration << '\n' ;
         sem_signal(sem_id, OUTPUT); 
 
-        int pauseDuration = rand() %5 + 1; 
-        sleep(pauseDuration); 
+        sleep(rand()%5+1); 
     }
 
     pthread_exit(0); 
@@ -203,23 +214,25 @@ void *consumer (void *parameter)
     auto parameters = (threadParameters*)parameter; 
     int sem_id = parameters->sem_id_; 
     int thread_id = parameters->thread_id_; 
+    sem_signal(sem_id, ID);
     Buffer *buffer = parameters->buffer_; 
     
     while (1) {
 
         //if there are no items in the buffer, wait
         //for max 20s
-        if (sem_wait_till_time(sem_id, ITEMS, 20)) {
-            break; 
-        }
-        
+
+
+        sem_wait(sem_id, ITEMS); 
+
         //wait to access the buffer
         sem_wait(sem_id, MUTEX); 
         //take job from the buffer
-        job_id = buffer->startJob(duration); 
+        job_id = buffer->popJob(duration); 
         //signal that finished accssing the buffer
         sem_signal(sem_id, MUTEX); 
         //signal that there is an extra space in the buffer 
+        sem_signal(sem_id, SPACE); 
 
         sem_wait(sem_id, OUTPUT); 
         std::cout << "Consumer(" << thread_id << "): job id: "
@@ -234,19 +247,12 @@ void *consumer (void *parameter)
         std::cout <<"Consumer(" << thread_id << "): Job id: " << job_id
                     << " completed" << '\n' ;
         sem_signal(sem_id, OUTPUT); 
-
-        sem_wait(sem_id, MUTEX); 
-        buffer->finishJob(job_id); 
-        sem_signal(sem_id, MUTEX); 
-        sem_signal(sem_id, SPACE); 
     }
 
-    // TODO 
-
-  std::cout << "Consumer thread: " << thread_id << " has no more jobs left to run. "
+    std::cout << "Consumer thread: " << thread_id << " has no more jobs left to run. "
             << "Exiting.\n"; 
 
-  pthread_exit (0);
+    pthread_exit (0);
 
 }
 int initSemophores(int q_size) {
