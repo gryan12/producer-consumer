@@ -30,64 +30,51 @@ int initSemophores(int q_size);
 class Buffer {
     private: 
          int *queue_;
-         int capacity, front, rear;
+         int capacity;
+         int size_; 
     
     public: 
+         //returns the total number of elements in queue_
          int currentSize() {
-             return std::abs(std::abs(capacity - front+1) - std::abs(capacity - rear-1));
+             return size_; 
          }
-         //returns the ID. ID is just index+1;
+
+         //push a job into the next available space on queue, returm the ID (index +1) of the job 
+         //
          int pushJob(int duration) {
-
-             if ((front == 0 && rear == capacity-1) || (rear +1 == front)) {
-                 std::cerr <<"Something has gone wrong! Trying to add to "
-                     << " the buffer when its full. ";
-                 return -1;
+             for (int i = 0; i < duration; i++) {
+                 if (queue_[i] == 0) {
+                     queue_[i] = duration; 
+                     size_++; 
+                     return i + 1; 
+                 }
              }
-
-             if (rear == capacity-1) {
-                 rear = 0;
-             } else {
-                 rear ++;
-                 queue_[rear] = duration;
-             }
-             if (front == -1) {
-                 front = 0;
-             }
-             //"id"
-             return rear +1;
+             return -4; 
          }
 
-        int popJob(int &duration) {
-
-            if (front == -1) {
-                std::cerr << "Something went wrong! attempting to take "
-                    << "from empty buffer. ";
-                return -1;
-            }
-
-            int k = queue_[front];
-            if (front == rear) {
-                front = -1;
-                rear = -1;
-            } else {
-                if (front == capacity -1) {
-                    front = 0;
-                } else {
-                    front++;
+        //find a job in the queue that is not being accesed by another consumer, 
+        //and start processing it. 
+        int startJob(int &duration) {
+            for (int i = 0; i < capacity; i++) {
+                if (queue_[i] > 0) {
+                    duration = queue_[i]; 
+                    queue_[i] = -1; 
+                    return i+1; 
                 }
             }
-            duration = k;
-            return front;
+            return -3; 
         }
 
+        //delete job from queue array, freeing it up for future use
         void finishJob(int jobID) {
-            
+            jobID--; 
+            queue_[jobID] = 0; 
+            size_--; 
         }
 
         Buffer(int size) : capacity(size) {
             queue_ = new int[size]();
-            front = rear = -1;
+            size_ = 0; 
         }
 
         ~Buffer() {
@@ -186,7 +173,6 @@ void *producer (void *parameter)
     while (jobs--) {
 
         duration = rand() %10 + 1; 
-
         sem_wait(sem_id, SPACE); 
 
         sem_wait(sem_id, MUTEX); 
@@ -197,11 +183,13 @@ void *producer (void *parameter)
 
         size = buffer->currentSize(); 
 
-        std::cout <<"Producer(" << thread_id << "): job id: "
+        std::cout <<"\tProducer(" << thread_id << "): job id: "
                   << job_id 
-                  << "duration: " << duration << '\n' ;
+                  << " duration: " << duration << '\n' ;
 
-        sleep(5); 
+
+        int pauseDuration = rand() %5 + 1; 
+        sleep(pauseDuration); 
     }
 
     pthread_exit(0); 
@@ -227,11 +215,10 @@ void *consumer (void *parameter)
         //wait to access the buffer
         sem_wait(sem_id, MUTEX); 
         //take job from the buffer
-        job_id = buffer->popJob(duration); 
+        job_id = buffer->startJob(duration); 
         //signal that finished accssing the buffer
         sem_signal(sem_id, MUTEX); 
         //signal that there is an extra space in the buffer 
-        sem_signal(sem_id, SPACE); 
 
         std::cout << "Consumer(" << thread_id << "): job id: "
                   << job_id 
@@ -242,6 +229,10 @@ void *consumer (void *parameter)
 
         std::cout <<"Consumer(" << thread_id << "): Job id: " << job_id
                     << " completed" << '\n' ;
+        sem_wait(sem_id, MUTEX); 
+        buffer->finishJob(job_id); 
+        sem_signal(sem_id, MUTEX); 
+        sem_signal(sem_id, SPACE); 
     }
 
     // TODO 
