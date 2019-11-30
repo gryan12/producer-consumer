@@ -21,7 +21,7 @@
 # include <iostream>
 using namespace std;
 
-#define SEM_KEY 0x82 // Change this number as needed
+#define SEM_KEY 0x83 // Change this number as needed
 
 union semun {
     int val;               /* used for SETVAL only */
@@ -33,7 +33,8 @@ enum sem_index {
     MUTEX,  //mutual exclusion of buffer access
     SPACE,  //check if buffer is not full
     ITEMS,  //check if buffer is not empty
-    ID      //mutual exclusion of ID generation/assignment
+    ID,      //mutual exclusion of ID generation/assignment
+    OUTPUT
 }; 
 
 

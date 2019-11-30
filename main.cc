@@ -183,10 +183,11 @@ void *producer (void *parameter)
 
         size = buffer->currentSize(); 
 
+        sem_wait(sem_id, OUTPUT); 
         std::cout <<"\tProducer(" << thread_id << "): job id: "
                   << job_id 
                   << " duration: " << duration << '\n' ;
-
+        sem_signal(sem_id, OUTPUT); 
 
         int pauseDuration = rand() %5 + 1; 
         sleep(pauseDuration); 
@@ -220,15 +221,20 @@ void *consumer (void *parameter)
         sem_signal(sem_id, MUTEX); 
         //signal that there is an extra space in the buffer 
 
+        sem_wait(sem_id, OUTPUT); 
         std::cout << "Consumer(" << thread_id << "): job id: "
                   << job_id 
                   << " executing sleep duration: " << duration 
                   << '\n';
+        sem_signal(sem_id, OUTPUT); 
 
         sleep(duration); 
 
+        sem_wait(sem_id, OUTPUT); 
         std::cout <<"Consumer(" << thread_id << "): Job id: " << job_id
                     << " completed" << '\n' ;
+        sem_signal(sem_id, OUTPUT); 
+
         sem_wait(sem_id, MUTEX); 
         buffer->finishJob(job_id); 
         sem_signal(sem_id, MUTEX); 
@@ -261,6 +267,8 @@ int initSemophores(int q_size) {
     //mutex to ensure that only one thread generatung an ID at a time
     //(to prevent aberrant duplication of IDs)
     sem_init(sem, ID, 1);
+
+    sem_init(sem, OUTPUT, 1);
     return sem; 
 }
 
