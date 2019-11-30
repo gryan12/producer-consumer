@@ -45,14 +45,6 @@ class Buffer {
 
         //returns the ID of the job
         int pushJob(int duration) {
-            //if full 
-            if ((front==0 && rear== capacity-1) || (rear+1 == front)) {
-                return -1; 
-            }
-
-            if (front == -1) {
-                front = 0; 
-            }
 
             //circle, if rear at end move to start
             if(rear == capacity-1) {
@@ -61,35 +53,35 @@ class Buffer {
                 rear++; 
             }
             queue[rear] = duration; 
+
+		if (front ==  -1) {
+			front = 0; 
+		}
+
             return rear+1; 
         }
 
         //returns the ID of the job, and puts duration
         //in @duration
+	//should never be accessed when empty
         int popJob(int &duration) {
-            if (front == -1) {
-                std::cout << "is emptybruh"; 
-                return -1; 
-            }
             int temp, rval; 
             temp = queue[front]; 
             if (front == rear) {
+		rval = front + 1; 
                 front = rear = -1; 
             } else {
-                if (front == capacity-1) {
+                if (front == capacity - 1) {
                     front = 0; 
                     rval = capacity; 
                 } else {
                     front++; 
                     rval = front; 
                 }
-
             }
             duration = temp; 
             return rval; 
         }
-
-
 };
 
 
@@ -190,21 +182,25 @@ void *producer (void *parameter)
 
         sem_wait(sem_id, MUTEX); 
         job_id = buffer->pushJob(duration); 
-        sem_signal(sem_id, MUTEX); 
-        
-        sem_signal(sem_id, ITEMS); 
-
 
         sem_wait(sem_id, OUTPUT); 
-        std::cout <<"\tProducer(" << thread_id << "): job id: "
+        std::cout <<"Producer(" << thread_id << "): job id: "
                   << job_id 
                   << " duration: " << duration << '\n' ;
         sem_signal(sem_id, OUTPUT); 
 
+        sem_signal(sem_id, MUTEX); 
+        
+        sem_signal(sem_id, ITEMS); 
+
         sleep(rand()%5+1); 
     }
 
-    pthread_exit(0); 
+    	sem_wait(sem_id, OUTPUT); 
+	std::cout <<"Producer(" << thread_id << "): has no more jobs "
+		  << "to produce. Exiting." << '\n'; 
+    	sem_signal(sem_id, OUTPUT); 
+	pthread_exit(0); 
 }
 
 //args better
@@ -222,24 +218,26 @@ void *consumer (void *parameter)
         //if there are no items in the buffer, wait
         //for max 20s
 
+      if (sem_wait_till_time(sem_id, ITEMS, 20)) {
+	      break; 
+      }
 
-        sem_wait(sem_id, ITEMS); 
 
         //wait to access the buffer
         sem_wait(sem_id, MUTEX); 
         //take job from the buffer
         job_id = buffer->popJob(duration); 
-        //signal that finished accssing the buffer
-        sem_signal(sem_id, MUTEX); 
-        //signal that there is an extra space in the buffer 
-        sem_signal(sem_id, SPACE); 
-
         sem_wait(sem_id, OUTPUT); 
         std::cout << "Consumer(" << thread_id << "): job id: "
                   << job_id 
                   << " executing sleep duration: " << duration 
                   << '\n';
         sem_signal(sem_id, OUTPUT); 
+        //signal that finished accssing the buffer
+        sem_signal(sem_id, MUTEX); 
+        //signal that there is an extra space in the buffer 
+        sem_signal(sem_id, SPACE); 
+
 
         sleep(duration); 
 
