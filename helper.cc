@@ -10,6 +10,13 @@
 
 # include "helper.h"
 
+/* output message to std::cerr, return errorode */ 
+int returnErr(int errorCode, const std::string &message = "") {
+	Errors error = (Errors)errorCode; 
+	std::cerr << errorMessages.at(error) << message; 
+	return errorCode; 
+}
+
 int check_arg (char *buffer)
 {
   int i, num = 0, temp = 0;
@@ -47,8 +54,9 @@ int sem_init (int id, int num, int value)
 {
   union semun semctl_arg;
   semctl_arg.val = value;
-  if (semctl (id, num, SETVAL, semctl_arg) < 0)
-    return -1;
+  if (semctl (id, num, SETVAL, semctl_arg) < 0) {
+	  return -1; 
+  }
   return 0;
 }
 
@@ -75,10 +83,50 @@ int sem_close (int id)
   return 0;
 }
 
-//
-//int wait_till_timeout (int id, short unsigned int num, int max_wait_time = 20) {
-//  struct sembuf op[] = {
-//    {num, -1, SEM_UNDO}
-//  };
-//  semop (id, op, 1);
-//}
+
+int Buffer::pushJob(int duration) {
+	    //circle, if rear at end move to start
+    if(rear == capacity-1) {
+	rear = 0;
+    } else {
+	rear++;
+    }
+    queue[rear] = duration;
+
+	if (front ==  -1) {
+		front = 0;
+	}
+
+    return rear+1;
+
+}
+
+int Buffer::popJob(int &duration) {
+    int temp, rval;
+    temp = queue[front];
+    if (front == rear) {
+	rval = front + 1;
+	front = rear = -1;
+    } else {
+	if (front == capacity - 1) {
+	    front = 0;
+	    rval = capacity;
+	} else {
+	    front++;
+	    rval = front;
+	}
+    }
+    duration = temp;
+    return rval;
+}
+
+Buffer::Buffer(int max) : capacity(max) {
+	queue = new int[max]; 
+	front = rear = -1; 
+}
+
+
+Buffer::~Buffer() {
+	delete[] queue; 
+}
+
