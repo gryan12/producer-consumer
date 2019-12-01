@@ -28,8 +28,6 @@ struct threadParameters {
     threadParameters(): sem_id_(0),job_no_(0), buffer_(NULL) {}
 };
 
-
-
 int main (int argc, char **argv)
 {
     if (argc != 5) {
@@ -58,9 +56,7 @@ int main (int argc, char **argv)
     threadParameters parameters[prod_no]; 
     threadParameters cparameters[cons_no]; 
 
-
-
-    //producer posix thread generation
+    //create posix threads, passing producer function as task
     for (int i =0; i < prod_no; i++) {
         parameters[i].sem_id_ = sem_id; 
         parameters[i].thread_id_ = i+1; 
@@ -69,7 +65,7 @@ int main (int argc, char **argv)
         pthread_create(&p_ids[i], NULL, producer, (void*)&parameters[i]); 
     }
 
-    //consumer posix thread generation
+    //create posix threds, passing consumer function as task 
     for (int i =0; i < cons_no; i++) {
         cparameters[i].sem_id_ = sem_id; 
         cparameters[i].thread_id_ = i+1; 
@@ -86,6 +82,7 @@ int main (int argc, char **argv)
         pthread_join(c_ids[i], NULL); 
     }
 
+    //close semophore array, freeing up the semohpore key for resuse
     sem_close(sem_id); 
     return 0;
 }
@@ -105,7 +102,7 @@ void *producer (void *parameter)
 
     //while there are jobs left to produce
     while (jobs--) {
-	//generate random int between 1 and 10
+	    
         duration = (rand() %10 + 1); 
 	
 	//if there is no space in buffer, wait
@@ -206,10 +203,14 @@ int initSemophores(int q_size) {
     sem_init(sem, ITEMS, 0);
 
     //mutex to ensure that only one thread generatung an ID at a time
-    //(to prevent aberrant duplication of IDs)
+    //this just servs to ensure that the first threads that re created are the first threads 
+    //performing their tasks. it does not affect how well the jobs are done, just makes the output
+    //more accurately reflect the example
     sem_init(sem, ID, 1);
 
+    
     sem_init(sem, OUTPUT, 1);
+
     return sem; 
 }
 

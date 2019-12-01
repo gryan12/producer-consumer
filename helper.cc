@@ -96,6 +96,13 @@ int Buffer::pushJob(int duration) {
 
 	if (front ==  -1) {
 		front = 0;
+	} 
+	else if (empty) {
+		front = rear; 
+	}
+
+	if (empty) {
+		empty = false; 
 	}
 
     return rear+1;
@@ -105,9 +112,13 @@ int Buffer::pushJob(int duration) {
 int Buffer::popJob(int &duration) {
     int temp, rval;
     temp = queue[front];
+    //if front == rear == 0, then we keep the mthe same
+    //so that the first id is not instantly reused. while that would
+    //not be inherently bad, it looks less intuitive so extraction is executed this way instead
     if (front == rear) {
 	rval = front + 1;
-	front = rear = -1;
+	empty = true; 
+	//front = rear = -1;
     } else {
 	if (front == capacity - 1) {
 	    front = 0;

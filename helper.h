@@ -61,6 +61,7 @@ class Buffer {
 	private:
 		int* queue; 
 		int capacity, front, rear; 
+		bool empty = true; 
 	
 	public: 
 		/*adds @duration to the back of the queue,
