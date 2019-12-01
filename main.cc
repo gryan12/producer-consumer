@@ -191,7 +191,7 @@ void *consumer (void *parameter)
 
 }
 int initSemophores(int q_size) {
-    int res; 
+    int sem; 
     //create semophoore set + gen id
     sem = sem_create(SEM_KEY, 4);
 

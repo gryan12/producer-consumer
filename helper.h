@@ -22,7 +22,7 @@
 # include <iostream>
 using namespace std;
 
-#define SEM_KEY 0x83238 // Change this number as needed
+#define SEM_KEY 0x83278 // Change this number as needed
 
 union semun {
     int val;               /* used for SETVAL only */
@@ -79,7 +79,25 @@ class Buffer {
 		~Buffer(); 
 }; 
 
+/* wrapping the provided functions in SemophoreSet for ease of use/clarity. 
+ * singleton class as feel like it fits intention here well*/ 
 
+class SemophoreSet {
+	private: 
+		int size; 
+		int id_; 
+	public: 
+		
+		void signal(int identifier); 
+		void wait(int identifier); 
+		void init(int identifier, int startingValue); 
+
+		//create semophore array of given size
+		SemophoreSet(int size); 
+
+		//close the semophore array
+		~SemophoreSet(); 
+}; 
 
 enum Errors {
 	NO_ERROR,
@@ -98,5 +116,5 @@ std::map<Errors, std::string> const errorMessages {
 	{ERROR_INITIALISING_SEMOPHORE_ARRAY, "Semohore array failed to initialise."}
 }; 
 
-int returnErr(int errorCode, const std::string &message); 
+int returnErr(int errorCode, const std::string &message = ""); 
 

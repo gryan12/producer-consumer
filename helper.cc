@@ -11,7 +11,7 @@
 # include "helper.h"
 
 /* output message to std::cerr, return errorode */ 
-int returnErr(int errorCode, const std::string &message = "") {
+int returnErr(int errorCode, const std::string &message) {
 	Errors error = (Errors)errorCode; 
 	std::cerr << errorMessages.at(error) << message; 
 	return errorCode; 
@@ -84,6 +84,7 @@ int sem_close (int id)
 }
 
 
+/* START Buffer members */ 
 int Buffer::pushJob(int duration) {
 	    //circle, if rear at end move to start
     if(rear == capacity-1) {
@@ -130,3 +131,30 @@ Buffer::~Buffer() {
 	delete[] queue; 
 }
 
+/* END Buffer members */ 
+/* START SemophoreSet member */ 
+
+
+
+void SemophoreSet::signal(int identifier) {
+	sem_signal(id_, identifier); 
+}
+
+void SemophoreSet::wait(int identifier) {
+	sem_wait(id_, identifier); 
+}
+
+void SemophoreSet::init(int identifier, int startVal) {
+	sem_init(id_, identifier, startVal); 
+}
+
+SemophoreSet::SemophoreSet(int size) {
+	id_ = sem_create(SEM_KEY, size); 
+}
+
+SemophoreSet::~SemophoreSet() {
+	sem_close(id_); 
+}
+
+
+/* END SemophoreSet members */ 
