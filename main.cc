@@ -36,7 +36,13 @@ int main (int argc, char **argv)
     }
 
     int q_size, job_no, prod_no, cons_no, sem_id; 
-    parseArgs(q_size, job_no, prod_no, cons_no, argv); 
+
+    int res; 
+
+    res = parseArgs(q_size, job_no, prod_no, cons_no, argv); 
+    if (res) {
+	    return res; 
+    }
 
     //shared resource
     Buffer buffer(q_size); 
@@ -96,10 +102,10 @@ void *producer (void *parameter)
     //(just for clarity)
     int sem_id, jobs, job_id, thread_id, duration; 
     sem_id = parameters->sem_id_; 
-    jobs = parameters->job_no_; 
     thread_id = parameters->thread_id_; 
     Buffer *buffer = parameters->buffer_; 
 
+    jobs = parameters->job_no_; 
     //while there are jobs left to produce
     while (jobs--) {
 	    
@@ -208,7 +214,6 @@ int initSemophores(int q_size) {
     //more accurately reflect the example
     sem_init(sem, ID, 1);
 
-    
     sem_init(sem, OUTPUT, 1);
 
     return sem; 
@@ -217,24 +222,32 @@ int initSemophores(int q_size) {
 //parse command line arguments, return error if digit not provided
 int parseArgs(int &q, int &job_no, int&prod_no, int &cons_no, char** argv) {
     q = check_arg(argv[1]); 
-    if (q == -1) {
-	returnErr(INCORRECT_PARAMETER_TYPE, "First argument"); 
+    if (q < 0) {
+	return returnErr(INCORRECT_PARAMETER_TYPE, "First argument"); 
+    } else if (q == 0) {
+	    return returnErr(INVALID_PARAMETER_VALUE, "0-length queue provided"); 
     }
 
     job_no = check_arg(argv[2]); 
     if (job_no == -1) {
-	    returnErr(INCORRECT_PARAMETER_TYPE, "Second argument"); 
-    }
+	    return returnErr(INCORRECT_PARAMETER_TYPE, "Second argument"); 
+    } 
 
     prod_no = check_arg(argv[3]); 
     if (prod_no == -1) {
-	    returnErr(INCORRECT_PARAMETER_TYPE, "Third argument"); 
+	    return returnErr(INCORRECT_PARAMETER_TYPE, "Third argument"); 
+    } else if (prod_no == 0) {
+	    return returnErr(INVALID_PARAMETER_VALUE, "producer number of 0 given. "); 
     }
+
 
     cons_no = check_arg(argv[4]);
     if (cons_no == -1)  {
-	    returnErr(INCORRECT_PARAMETER_TYPE, "Fourth argument"); 
+	    return returnErr(INCORRECT_PARAMETER_TYPE, "Fourth argument"); 
+    } else if (cons_no == 0) {
+	    return returnErr(INVALID_PARAMETER_VALUE, "consumer number of 0 given."); 
     }
+
 
     return NO_ERROR; 
 }

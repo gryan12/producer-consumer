@@ -22,7 +22,7 @@
 # include <iostream>
 using namespace std;
 
-#define SEM_KEY 0x83278 // Change this number as needed
+#define SEM_KEY 0x855556// Change this number as needed
 
 union semun {
     int val;               /* used for SETVAL only */
@@ -83,27 +83,11 @@ class Buffer {
 /* wrapping the provided functions in SemophoreSet for ease of use/clarity. 
  * singleton class as feel like it fits intention here well*/ 
 
-class SemophoreSet {
-	private: 
-		int size; 
-		int id_; 
-	public: 
-		
-		void signal(int identifier); 
-		void wait(int identifier); 
-		void init(int identifier, int startingValue); 
-
-		//create semophore array of given size
-		SemophoreSet(int size); 
-
-		//close the semophore array
-		~SemophoreSet(); 
-}; 
-
 enum Errors {
 	NO_ERROR,
 	INCORRECT_NUMBER_OF_PARAMETERS, 
 	INCORRECT_PARAMETER_TYPE, 
+	INVALID_PARAMETER_VALUE, 
 	FAILURE_TO_INIT_SEMOPHORE, 
 	ERROR_INITIALISING_SEMOPHORE_ARRAY, 
 	ERROR_GENERATING_PTHREAD
@@ -113,6 +97,7 @@ enum Errors {
 std::map<Errors, std::string> const errorMessages {
 	{INCORRECT_NUMBER_OF_PARAMETERS, "Incorrect number of parameters provided"}, 
 	{INCORRECT_PARAMETER_TYPE, " is an incorrect parameter type: parameters must be numerical"}, 
+	{INVALID_PARAMETER_VALUE, "This is an impossible configuration."}, 
 	{FAILURE_TO_INIT_SEMOPHORE, " failed to initialise."}, 
 	{ERROR_INITIALISING_SEMOPHORE_ARRAY, "Semohore array failed to initialise."}
 }; 
