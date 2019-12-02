@@ -1,17 +1,5 @@
-/******************************************************************
- * The Main program with the two functions. A simple
- * example of creating and using a thread is provided.
- ******************************************************************/
 
 #include "helper.h"
-
-
-
-//make queue structure, this way do not need to pass 
-//BOTH queue size and pointer to queue object, just
-//pointer to queueu structure 
-
-
 
 void *producer (void *id);
 void *consumer (void *id);
@@ -24,20 +12,16 @@ struct threadParameters {
     int thread_id_; 
     Buffer *buffer_;
     int producer_id; 
-    threadParameters(int sem_id, int job_no, int thread_id, Buffer* buffer): sem_id_(sem_id),job_no_(job_no), thread_id_(thread_id), buffer_(buffer) {}
     threadParameters(): sem_id_(0),job_no_(0), buffer_(NULL) {}
 };
 
 int main (int argc, char **argv)
 {
     if (argc != 5) {
-        std::cerr <<"Incorrect number of parameters provided. Exiting.\n"; 
 	return returnErr(INCORRECT_NUMBER_OF_PARAMETERS); 
     }
 
-    int q_size, job_no, prod_no, cons_no, sem_id; 
-
-    int res; 
+    int q_size, job_no, prod_no, cons_no, sem_id, res; 
 
     res = parseArgs(q_size, job_no, prod_no, cons_no, argv); 
     if (res) {
@@ -58,11 +42,12 @@ int main (int argc, char **argv)
     pthread_t p_ids[prod_no];  
     pthread_t c_ids[cons_no];  
 
-    //creating arrays of parameter structures to pass to threads
+    //creating arrays of parameter structures to pass to threads.
     threadParameters parameters[prod_no]; 
     threadParameters cparameters[cons_no]; 
 
     //create posix threads, passing producer function as task
+    //every thread gets passed a pointer to its own struct 
     for (int i =0; i < prod_no; i++) {
         parameters[i].sem_id_ = sem_id; 
         parameters[i].thread_id_ = i+1; 
@@ -88,7 +73,7 @@ int main (int argc, char **argv)
         pthread_join(c_ids[i], NULL); 
     }
 
-    //close semophore array, freeing up the semohpore key for resuse
+    //close semophore array, freeing up the semophore key for resuse
     sem_close(sem_id); 
     return 0;
 }
@@ -98,46 +83,48 @@ void *producer (void *parameter)
 {
     auto parameters = (threadParameters*)parameter; 
 
-    //extract variables from threadParameter struct
-    //(just for clarity)
+    /*extract variables from threadParameter struct for 
+     * prettier code */ 
     int sem_id, jobs, job_id, thread_id, duration; 
     sem_id = parameters->sem_id_; 
     thread_id = parameters->thread_id_; 
     Buffer *buffer = parameters->buffer_; 
-
     jobs = parameters->job_no_; 
-    //while there are jobs left to produce
+
     while (jobs--) {
 	    
         duration = (rand() %10 + 1); 
 	
-	//if there is no space in buffer, wait
-        sem_wait(sem_id, SPACE); 
-	//if another thread is accessing buffer, wait
-        sem_wait(sem_id, MUTEX); 
-	//input a job into the buffer
+        sem_wait(sem_id, SPACE); //if no space in buffer, wait
+
+	//START buffer critical region 
+        sem_wait(sem_id, BUFFER_MUTEX); //if another thread accessing buffer, wait
+
         job_id = buffer->pushJob(duration); 
 
-	//if another thread is accessing std::cout wait
-        sem_wait(sem_id, OUTPUT); 
+	//output performed before signalling buffer mutex to 
+	//help output more accurately reflect actual order of operations 
+        sem_wait(sem_id, OUTPUT_MUTEX); 
         std::cout <<"Producer(" << thread_id << "): job id: "
                   << job_id 
                   << " duration: " << duration << '\n' ;
-	//signal output 
-        sem_signal(sem_id, OUTPUT); 
-	//signal buffer mutex
-        sem_signal(sem_id, MUTEX); 
-	//signal items semophore (increment value)
+        sem_signal(sem_id, OUTPUT_MUTEX); 
+
+        sem_signal(sem_id, BUFFER_MUTEX); //increment the sem val, allowing other thread to be released
+	//END buffer critical region
+	
+	//increment item semophore value
         sem_signal(sem_id, ITEMS); 
+
 	//sleep for random duration between 1 and 5
         sleep(rand()%5+1); 
     }
 
     //once no more jobs left to run
-     sem_wait(sem_id, OUTPUT); 
+     sem_wait(sem_id, OUTPUT_MUTEX); 
      std::cout <<"Producer(" << thread_id << "): has no more jobs "
 	  << "to produce. Exiting." << '\n'; 
-     sem_signal(sem_id, OUTPUT); 
+     sem_signal(sem_id, OUTPUT_MUTEX); 
      pthread_exit(0); 
 }
 
@@ -156,23 +143,27 @@ void *consumer (void *parameter)
 
         //if there are no items in the buffer, wait
         //for max 20s then exit
-      if (sem_wait_till_time(sem_id, ITEMS, 20)) {
+      	if (sem_wait_till_time(sem_id, ITEMS, 20)) {
 	      break; 
-      }
+      	}
 
         //if another thread accessing buffer, wait
-        sem_wait(sem_id, MUTEX); 
+        sem_wait(sem_id, BUFFER_MUTEX); 
+
         //remove job from buffer (this frees up the job id to be reused)
         job_id = buffer->popJob(duration); 
+
 	//if another thread printing to output, wait
-        sem_wait(sem_id, OUTPUT); 
+        sem_wait(sem_id, OUTPUT_MUTEX); 
         std::cout << "Consumer(" << thread_id << "): job id: "
                   << job_id 
                   << " executing sleep duration: " << duration 
                   << '\n';
-        sem_signal(sem_id, OUTPUT); 
+        sem_signal(sem_id, OUTPUT_MUTEX); 
+
         //signal that finished accssing the buffer
-        sem_signal(sem_id, MUTEX); 
+        sem_signal(sem_id, BUFFER_MUTEX); 
+
         //signal that there is an extra space in the buffer 
         sem_signal(sem_id, SPACE); 
 
@@ -180,15 +171,15 @@ void *consumer (void *parameter)
         sleep(duration); 
 
 	//report completion
-        sem_wait(sem_id, OUTPUT); 
+        sem_wait(sem_id, OUTPUT_MUTEX); 
         std::cout <<"Consumer(" << thread_id << "): Job id: " << job_id
                   << " completed" << '\n' ;
-        sem_signal(sem_id, OUTPUT); 
+        sem_signal(sem_id, OUTPUT_MUTEX); 
     }
 
     //once thread has timed out
     std::cout << "Consumer thread: " << thread_id << " has no more jobs left."
-            << '\n'; 
+            << " Exiting." << '\n'; 
 
     pthread_exit (0);
 
@@ -199,27 +190,27 @@ int initSemophores(int q_size) {
     sem = sem_create(SEM_KEY, 4);
 
     /*initialise our 4 semophores*/
-    //mutex: ensure mutual exclusivity for buffer access. 
-    sem_init(sem, MUTEX, 1);
+    //buffer mutex: ensure mutual exclusivity for buffer access. 
+    sem_init(sem, BUFFER_MUTEX, 1);
 
-    //check if buffer is not full
+    //general semophore: check if buffer is not full. 
     sem_init(sem, SPACE, q_size);
 
-    //check if items present in buffer 
+    //general semophore: check if items present in buffer 
     sem_init(sem, ITEMS, 0);
 
-    //mutex to ensure that only one thread generatung an ID at a time
-    //this just servs to ensure that the first threads that re created are the first threads 
-    //performing their tasks. it does not affect how well the jobs are done, just makes the output
-    //more accurately reflect the example
-    sem_init(sem, ID, 1);
-
-    sem_init(sem, OUTPUT, 1);
+    /* mutex to ensure only 1 thread printing to std::Cout. 
+     * necessary, as without it the output can get 
+     * messy with output statements being merged */ 
+    sem_init(sem, OUTPUT_MUTEX, 1);
 
     return sem; 
 }
 
-//parse command line arguments, return error if digit not provided
+/*parse command line arguments, return error if digit not provided 
+ * non-numerical arguments are not accepted, and for all but the number of
+ * jobs neither is 0 */ 
+
 int parseArgs(int &q, int &job_no, int&prod_no, int &cons_no, char** argv) {
     q = check_arg(argv[1]); 
     if (q < 0) {
@@ -236,18 +227,15 @@ int parseArgs(int &q, int &job_no, int&prod_no, int &cons_no, char** argv) {
     prod_no = check_arg(argv[3]); 
     if (prod_no == -1) {
 	    return returnErr(INCORRECT_PARAMETER_TYPE, "Third argument"); 
-    } else if (prod_no == 0) {
-	    return returnErr(INVALID_PARAMETER_VALUE, "producer number of 0 given. "); 
-    }
+    } 
 
 
     cons_no = check_arg(argv[4]);
     if (cons_no == -1)  {
 	    return returnErr(INCORRECT_PARAMETER_TYPE, "Fourth argument"); 
     } else if (cons_no == 0) {
-	    return returnErr(INVALID_PARAMETER_VALUE, "consumer number of 0 given."); 
+	    return returnErr(INVALID_PARAMETER_VALUE, " Consumer number of 0 given."); 
     }
-
 
     return NO_ERROR; 
 }

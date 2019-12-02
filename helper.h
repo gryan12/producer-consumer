@@ -31,11 +31,10 @@ union semun {
 };
 
 enum sem_index {
-    MUTEX,  //mutual exclusion of buffer access
+    BUFFER_MUTEX,  //mutual exclusion of buffer access
     SPACE,  //check if buffer is not full
     ITEMS,  //check if buffer is not empty
-    ID,      //mutual exclusion of ID generation/assignment
-    OUTPUT //only 1 thread accessing std::cout. otherwise, some of the output lines
+    OUTPUT_MUTEX //only 1 thread accessing std::cout. otherwise, some of the output lines
 	    //get merged together. 
 }; 
 
