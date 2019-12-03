@@ -72,7 +72,7 @@ class Buffer {
 		int popJob(int &duration); 
 		
 		/*param constructor. queue is initialised on heap 
-		with size of @max. front and rear set to null */
+		with size of @max. front and rear set to -1 */
 		Buffer(int max); 
 
 		~Buffer(); 
