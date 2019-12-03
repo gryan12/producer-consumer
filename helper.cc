@@ -10,7 +10,7 @@
 
 # include "helper.h"
 
-/* output message to std::cerr, return errorcode */ 
+/* output message to std::cerr, return @errorcode */ 
 int returnErr(int errorCode, const std::string &message) {
 	Errors error = (Errors)errorCode; 
 	std::cerr << errorMessages.at(error) << message << " Exiting.\n";
@@ -32,6 +32,8 @@ int check_arg (char *buffer)
   return num;
 }
 
+//timed version of sem_wait function, one @time number of seconds have 
+//passed function will return -1 
 int sem_wait_till_time (int id, short unsigned int num, int time)
 {
   struct sembuf op[] = {
@@ -85,8 +87,12 @@ int sem_close (int id)
 
 
 /* START Buffer members */ 
+
+/*adds @duration to the back of the queue,
+ * returns the job ID associated with this duration
+ * (its index +1) */
 int Buffer::pushJob(int duration) {
-	    //circle, if rear at end move to start
+    //circle, if rear at end move to start
     if(rear == capacity-1) {
 	rear = 0;
     } else {
@@ -109,16 +115,16 @@ int Buffer::pushJob(int duration) {
 
 }
 
+/* returns job ID, value of element at front of queue put
+ * into @duration */ 
 int Buffer::popJob(int &duration) {
+
     int temp, rval;
     temp = queue[front];
-    //if front == rear == 0, then we keep the mthe same
-    //so that the first id is not instantly reused. while that would
-    //not be inherently bad, it looks less intuitive so extraction is executed this way instead
+    //if there is only 1 element in the queue
     if (front == rear) {
 	rval = front + 1;
 	empty = true; 
-	//front = rear = -1;
     } else {
 	if (front == capacity - 1) {
 	    front = 0;
@@ -132,12 +138,13 @@ int Buffer::popJob(int &duration) {
     return rval;
 }
 
+//allocate queue on heap
 Buffer::Buffer(int max) : capacity(max) {
 	queue = new int[max]; 
 	front = rear = -1; 
 }
 
-
+//deallocate queue
 Buffer::~Buffer() {
 	delete[] queue; 
 }
