@@ -47,15 +47,14 @@ void sem_wait (int, short unsigned int);
 void sem_signal (int, short unsigned int);
 int sem_close (int);
 
-/* sem_wait, except once @time reached returns non-0 value */ 
+/* sem_wait, except if @time reached returns -1 */ 
 int sem_wait_till_time (int id, short unsigned int num, int time); 
 
 
-/* data structure that contains jobs. 
- * circular queue functionality implemented with an array, the ID of a given job
- * is its index+1 (1-indexed jobs). Jobs are removed from
- * the array once they are accessed by consumers, allowing for this ID to be
- * reused. */
+/* data structure with circular-queue functionality implemented using array. 
+ * Job ID is determined by index+1. 
+ * this structure assumes other objects are handling whether
+ * pushing or removing are valid (the items and space semophores) */ 
 class Buffer {
 	private:
 		int* queue; 
@@ -64,7 +63,7 @@ class Buffer {
 	
 	public: 
 		/*adds @duration to the back of the queue,
-		 * retuns the job ID associated with this duration 
+		 * returns the job ID associated with this duration 
 		 * (its index +1) */
 		int pushJob(int duration); 
 
@@ -72,16 +71,15 @@ class Buffer {
 		 * ID. duration of this job is stored in @duration*/
 		int popJob(int &duration); 
 		
-		//param constructor. queue is initialised on heap 
-		//with size of @max. front and rear set to null
+		/*param constructor. queue is initialised on heap 
+		with size of @max. front and rear set to -1 */
 		Buffer(int max); 
 
 		~Buffer(); 
 }; 
 
-/* wrapping the provided functions in SemophoreSet for ease of use/clarity. 
- * singleton class as feel like it fits intention here well*/ 
 
+//error codes
 enum Errors {
 	NO_ERROR,
 	INCORRECT_NUMBER_OF_PARAMETERS, 
@@ -92,7 +90,7 @@ enum Errors {
 	ERROR_GENERATING_PTHREAD
 };
 
-
+//error messages 
 std::map<Errors, std::string> const errorMessages {
 	{INCORRECT_NUMBER_OF_PARAMETERS, "Incorrect number of parameters provided"}, 
 	{INCORRECT_PARAMETER_TYPE, " is an incorrect parameter type: parameters must be numerical"}, 
@@ -101,5 +99,6 @@ std::map<Errors, std::string> const errorMessages {
 	{ERROR_INITIALISING_SEMOPHORE_ARRAY, "Semohore array failed to initialise."}
 }; 
 
+//outputs appropriate message to std::cerr, returns value of @errorCode
 int returnErr(int errorCode, const std::string &message = ""); 
 

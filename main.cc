@@ -1,4 +1,3 @@
-
 #include "helper.h"
 
 void *producer (void *id);
@@ -31,7 +30,7 @@ int main (int argc, char **argv)
     //shared resource
     Buffer buffer(q_size); 
 
-    //generate our set of 4 semophores
+    //generate set of 4 semophores
     sem_id = initSemophores(q_size); 
     if (sem_id == -1) {
         return returnErr(ERROR_INITIALISING_SEMOPHORE_ARRAY); 
@@ -78,18 +77,17 @@ int main (int argc, char **argv)
     return 0;
 }
 
-//producer thread function.
+//producer function.
 void *producer (void *parameter) 
 {
     auto parameters = (threadParameters*)parameter; 
 
-    /*extract variables from threadParameter struct for 
-     * prettier code */ 
     int sem_id, jobs, job_id, thread_id, duration; 
     sem_id = parameters->sem_id_; 
     thread_id = parameters->thread_id_; 
     Buffer *buffer = parameters->buffer_; 
     jobs = parameters->job_no_; 
+
 
     while (jobs--) {
 	    
@@ -99,19 +97,15 @@ void *producer (void *parameter)
 
 	//START buffer critical region 
         sem_wait(sem_id, BUFFER_MUTEX); //if another thread accessing buffer, wait
-
         job_id = buffer->pushJob(duration); 
+        sem_signal(sem_id, BUFFER_MUTEX); //increment the sem val, allowing other thread to be released
+	//END buffer critical region
 
-	//output performed before signalling buffer mutex to 
-	//help output more accurately reflect actual order of operations 
         sem_wait(sem_id, OUTPUT_MUTEX); 
         std::cout <<"Producer(" << thread_id << "): job id: "
                   << job_id 
                   << " duration: " << duration << '\n' ;
         sem_signal(sem_id, OUTPUT_MUTEX); 
-
-        sem_signal(sem_id, BUFFER_MUTEX); //increment the sem val, allowing other thread to be released
-	//END buffer critical region
 	
 	//increment item semophore value
         sem_signal(sem_id, ITEMS); 
@@ -147,11 +141,12 @@ void *consumer (void *parameter)
 	      break; 
       	}
 
-        //if another thread accessing buffer, wait
-        sem_wait(sem_id, BUFFER_MUTEX); 
 
-        //remove job from buffer (this frees up the job id to be reused)
-        job_id = buffer->popJob(duration); 
+	//START buffer critical region
+        sem_wait(sem_id, BUFFER_MUTEX) //if another thread accessing buffer, wait
+        job_id = buffer->popJob(duration); //remove job from buffer (this frees up the job id to be reused)
+	sem_signal(sem_id, BUFFER_MUTEX); //signal that finished accssing the buffer
+	//END buffer critical region 
 
 	//if another thread printing to output, wait
         sem_wait(sem_id, OUTPUT_MUTEX); 
@@ -161,16 +156,11 @@ void *consumer (void *parameter)
                   << '\n';
         sem_signal(sem_id, OUTPUT_MUTEX); 
 
-        //signal that finished accssing the buffer
-        sem_signal(sem_id, BUFFER_MUTEX); 
-
         //signal that there is an extra space in the buffer 
         sem_signal(sem_id, SPACE); 
 
-	//perform job as specified in buffer 
         sleep(duration); 
 
-	//report completion
         sem_wait(sem_id, OUTPUT_MUTEX); 
         std::cout <<"Consumer(" << thread_id << "): Job id: " << job_id
                   << " completed" << '\n' ;
